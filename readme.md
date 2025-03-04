@@ -2,7 +2,15 @@
 
 Let's create a new project with .NET Aspire and add a simple web API.
 
+[.NET Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/) is a framework designed to **simplify the development of distributed, cloud-native applications**. It offers a collection of tools, templates, and NuGet packages that streamline the configuration, orchestration, and integration of multiple services. By providing opinionated defaults for logging, telemetry, health checks, and service discovery, .NET Aspire minimizes setup complexities and accelerates the development cycle—allowing developers to focus on building robust, scalable features rather than managing infrastructure.
+
+Additionally, .NET Aspire enhances developer productivity by delivering a consistent and repeatable environment for both local development and production deployment. Its integrated dashboard offers real-time observability into application performance, making it easier to monitor health, troubleshoot issues, and optimize resource usage.
+
 ## Create project
+
+The following commands start by creating a new .NET Aspire solution. Inside the new folder _WebApi_, a new ASP.NET Core Web API project is generated, and a reference is added to the "AspireWalkthrough.ServiceDefaults" project, which provides common service configurations and defaults for the application. 
+
+Finally, the process moves into the "AspireWalkthrough.AppHost" project folder and adds a reference to the Web API project, thereby linking the AppHost project with the Web API so that it can orchestrate or interact with it.
 
 ```sh
 dotnet new aspire
@@ -22,6 +30,8 @@ cd ..
 
 ## Web API
 
+Let's start with a very simple web API. The code calls _AddServiceDefaults()_, which is a custom extension method imported from a shared project. This method automatically sets up a range of essential services—such as logging, telemetry, health checks, and service discovery—ensuring that the application has a consistent and production-ready configuration without the need for manual setup of each individual service.
+
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults(); // Note: Service defaults come from shared project
@@ -37,6 +47,8 @@ app.Run();
 
 ## App Host
 
+[The AppHost defines the _app model_](https://learn.microsoft.com/en-us/dotnet/aspire/fundamentals/app-host-overview). code begins by creating a builder tailored for distributed applications using _DistributedApplication.CreateBuilder()_. It adds the WebApi project to the application by invoking _builder.AddProject_ and configures it to run with two replicas.
+
 ```csharp
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -45,6 +57,8 @@ var webapi = builder.AddProject<Projects.WebApi>("webapi")
 
 builder.Build().Run();
 ```
+
+Take a look at the _.csproj_ file of the App Host. Note the `<IsAspireHost>true</IsAspireHost>`. The app host orchestrates the execution of all projects that are part of the _app model_.
 
 ## Run
 
@@ -94,6 +108,8 @@ app.Run();
 
 ## App Host
 
+The following code adds a backend project, named _backend_, to the application and configures it to run with two replicas. Next, the web API project is set up to reference the backend project. This reference indicates that the web API will interact with the backend service.
+
 ```csharp
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -109,11 +125,16 @@ builder.Build().Run();
 
 ## Web API
 
+Let's try to access the backend service from the web API. We will use the _HttpClientFactory_ to create an HTTP client and call the backend service. The response is then returned to the client.
+
+The endpoint _ip_ can be used to resolve the IP address of the backend service. The service reference is retrieved from the configuration and resolved to an IP address using the _Dns.GetHostEntryAsync_ method.
+
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.Services.AddHttpClient("backend", client =>
 {
+    // Uses .NET service discovery (https://learn.microsoft.com/en-us/dotnet/core/extensions/service-discovery)
     client.BaseAddress = new("https://backend");
 });
 var app = builder.Build();
@@ -133,11 +154,44 @@ app.MapGet("/add", async (IHttpClientFactory factory) =>
     });
 });
 
+app.MapGet("/ip", async () =>
+{
+    // See also https://learn.microsoft.com/en-us/dotnet/aspire/fundamentals/app-host-overview?tabs=docker#service-endpoint-environment-variable-format
+    // We could also access the environment variable services__backend__https__0 directly.
+    var serviceReference = config["Services:backend:https:0"];
+    serviceReference = serviceReference?.Replace("https://", string.Empty);
+    var port = serviceReference?[(serviceReference.IndexOf(':') + 1)..] ?? string.Empty;
+    serviceReference = serviceReference![..^(port.Length + 1)];
+
+    var ipAddress = string.Empty;
+    try
+    {
+        if (!string.IsNullOrEmpty(serviceReference))
+        {
+            var hostEntry = await Dns.GetHostEntryAsync(serviceReference);
+            ipAddress = hostEntry.AddressList.FirstOrDefault()?.ToString() ?? "Not found";
+        }
+        else
+        {
+            ipAddress = "Service reference not available";
+        }
+    }
+    catch (Exception ex)
+    {
+        ipAddress = $"Error resolving IP: {ex.Message}";
+    }
+
+    return Results.Ok(new { 
+        ServiceReference = serviceReference,
+        Port = port,
+        IpAddress = ipAddress
+    });
+});
+
 app.Run();
 
 record ResultDto(int X, int Y);
 ```
-
 
 # Add Postgres
 
@@ -156,6 +210,8 @@ cd ..
 ```
 
 ## App Host
+
+The Postgres section is responsible for provisioning a PostgreSQL server container and configuring persistent storage. A writable data volume named _postgresdata_ is attached to ensure that database data remains persistent even when containers are restarted. Two distinct databases are defined on the server: one simply named "aspiredb" and another, "postgresdb," which uses the default database name "postgres." The orchestration ensures that any service relying on these databases, such as the web API, will not begin operation until both databases are fully initialized and ready, thanks to the use of dependency waiting methods.
 
 ```csharp
 var builder = DistributedApplication.CreateBuilder(args);
@@ -210,6 +266,40 @@ app.MapGet("/add", async (IHttpClientFactory factory) =>
     });
 });
 
+app.MapGet("/ip", async () =>
+{
+    // See also https://learn.microsoft.com/en-us/dotnet/aspire/fundamentals/app-host-overview?tabs=docker#service-endpoint-environment-variable-format
+    // We could also access the environment variable services__backend__https__0 directly.
+    var serviceReference = config["Services:backend:https:0"];
+    serviceReference = serviceReference?.Replace("https://", string.Empty);
+    var port = serviceReference?[(serviceReference.IndexOf(':') + 1)..] ?? string.Empty;
+    serviceReference = serviceReference![..^(port.Length + 1)];
+
+    var ipAddress = string.Empty;
+    try
+    {
+        if (!string.IsNullOrEmpty(serviceReference))
+        {
+            var hostEntry = await Dns.GetHostEntryAsync(serviceReference);
+            ipAddress = hostEntry.AddressList.FirstOrDefault()?.ToString() ?? "Not found";
+        }
+        else
+        {
+            ipAddress = "Service reference not available";
+        }
+    }
+    catch (Exception ex)
+    {
+        ipAddress = $"Error resolving IP: {ex.Message}";
+    }
+
+    return Results.Ok(new { 
+        ServiceReference = serviceReference,
+        Port = port,
+        IpAddress = ipAddress
+    });
+});
+
 app.MapGet("/answer-from-db", async ([FromKeyedServices("postgresdb")] NpgsqlDataSource postgres, [FromKeyedServices("aspiredb")] NpgsqlDataSource aspire) =>
 {
     // Ensure that database "aspiredb" exists
@@ -248,7 +338,8 @@ record ResultDto(int X, int Y);
 
 ```sh
 docker ps
-docker volume ls
+docker volume ls | grep postgresdata
+docker run --rm -v postgresdata:/volume alpine ls /volume
 ```
 
 # Add Redis
@@ -336,6 +427,40 @@ app.MapGet("/add", async (IHttpClientFactory factory) =>
     });
 });
 
+app.MapGet("/ip", async () =>
+{
+    // See also https://learn.microsoft.com/en-us/dotnet/aspire/fundamentals/app-host-overview?tabs=docker#service-endpoint-environment-variable-format
+    // We could also access the environment variable services__backend__https__0 directly.
+    var serviceReference = config["Services:backend:https:0"];
+    serviceReference = serviceReference?.Replace("https://", string.Empty);
+    var port = serviceReference?[(serviceReference.IndexOf(':') + 1)..] ?? string.Empty;
+    serviceReference = serviceReference![..^(port.Length + 1)];
+
+    var ipAddress = string.Empty;
+    try
+    {
+        if (!string.IsNullOrEmpty(serviceReference))
+        {
+            var hostEntry = await Dns.GetHostEntryAsync(serviceReference);
+            ipAddress = hostEntry.AddressList.FirstOrDefault()?.ToString() ?? "Not found";
+        }
+        else
+        {
+            ipAddress = "Service reference not available";
+        }
+    }
+    catch (Exception ex)
+    {
+        ipAddress = $"Error resolving IP: {ex.Message}";
+    }
+
+    return Results.Ok(new { 
+        ServiceReference = serviceReference,
+        Port = port,
+        IpAddress = ipAddress
+    });
+});
+
 app.MapGet("/answer-from-db", async ([FromKeyedServices("postgresdb")] NpgsqlDataSource postgres, [FromKeyedServices("aspiredb")] NpgsqlDataSource aspire) =>
 {
     // Ensure that database "aspiredb" exists
@@ -382,7 +507,6 @@ static async Task<bool> CheckDatabaseExists(NpgsqlDataSource postgres, string db
 record ResultDto(int X, int Y);
 ```
 
-
 # Add Web Frontend
 
 Let's add a web frontend to our project. We will learn more about networking.
@@ -403,6 +527,8 @@ Copy the content of the following files:
 * [Frontend/vite.config.js](Frontend/vite.config.js)
 * [Frontend/index.html](Frontend/index.html)
 * [Frontend/src/index.js](Frontend/src/index.js)
+
+Pay special attention to _vite.config.js_ and _package.json_.
 
 ## Add NuGet for Node projects
 

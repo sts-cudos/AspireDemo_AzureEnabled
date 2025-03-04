@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Net;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 
@@ -5,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.Services.AddHttpClient("backend", client =>
 {
+    // Uses .NET service discovery (https://learn.microsoft.com/en-us/dotnet/core/extensions/service-discovery)
     client.BaseAddress = new("https://backend");
 });
 builder.AddKeyedNpgsqlDataSource("aspiredb");
@@ -33,6 +36,40 @@ app.MapGet("/add", async (IHttpClientFactory factory) =>
     return Results.Ok(new
     {
         Sum = dataResponse?.X ?? 0 + dataResponse?.Y ?? 0,
+    });
+});
+
+app.MapGet("/ip", async (IConfiguration config) =>
+{
+    // See also https://learn.microsoft.com/en-us/dotnet/aspire/fundamentals/app-host-overview?tabs=docker#service-endpoint-environment-variable-format
+    // We could also access the environment variable services__backend__https__0 directly.
+    var serviceReference = config["Services:backend:https:0"];
+    serviceReference = serviceReference?.Replace("https://", string.Empty);
+    var port = serviceReference?[(serviceReference.IndexOf(':') + 1)..] ?? string.Empty;
+    serviceReference = serviceReference![..^(port.Length + 1)];
+
+    var ipAddress = string.Empty;
+    try
+    {
+        if (!string.IsNullOrEmpty(serviceReference))
+        {
+            var hostEntry = await Dns.GetHostEntryAsync(serviceReference);
+            ipAddress = hostEntry.AddressList.FirstOrDefault()?.ToString() ?? "Not found";
+        }
+        else
+        {
+            ipAddress = "Service reference not available";
+        }
+    }
+    catch (Exception ex)
+    {
+        ipAddress = $"Error resolving IP: {ex.Message}";
+    }
+
+    return Results.Ok(new { 
+        ServiceReference = serviceReference,
+        Port = port,
+        IpAddress = ipAddress
     });
 });
 
