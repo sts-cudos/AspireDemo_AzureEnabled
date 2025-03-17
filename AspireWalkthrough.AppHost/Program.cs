@@ -2,6 +2,9 @@ using Microsoft.Extensions.Hosting;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
+var launchProfile = builder.Configuration["DOTNET_LAUNCH_PROFILE"] ??
+                    builder.Configuration["AppHost:DefaultLaunchProfileName"];
+
 var backend = builder.AddProject<Projects.Backend>("backend")
     .WithReplicas(2);
 
@@ -11,7 +14,11 @@ var pw = builder.AddParameter("postgrespassword", secret: true);
 var postgres = builder
     .AddAzurePostgresFlexibleServer("postgres");
 
-if (builder.Environment.IsDevelopment())
+if (builder.ExecutionContext.IsPublishMode)
+{
+    postgres.WithPasswordAuthentication(user, pw);
+}
+else
 {
     postgres.RunAsContainer(configure =>
     {
@@ -20,12 +27,9 @@ if (builder.Environment.IsDevelopment())
             .WithContainerName("postgres-local");
     });
 }
-else{
-    postgres.WithPasswordAuthentication(user, pw);
-}
 
 var aspiredb = postgres.AddDatabase("aspiredb");
-var postgresdb = postgres.AddDatabase(name: "postgresdb", databaseName: "postgres");
+var postgresdb = postgres.AddDatabase(name: "postgresdb", databaseName: "aspirepostgres");
 
 var cache = builder
     .AddAzureRedis("cache")
@@ -42,16 +46,18 @@ var webapi = builder.AddProject<Projects.WebApi>("webapi")
     .WaitFor(cache);
 
 var frontend = builder.AddNpmApp("frontend", "../AngularFE")
-    .WithReference(webapi)
-    .WithExternalHttpEndpoints()
-    .PublishAsDockerFile();
+    .WithReference(webapi);
 
-if(builder.Environment.IsDevelopment())
+if (builder.ExecutionContext.IsPublishMode)
 {
-    frontend.WithHttpEndpoint(env: "PORT");
+    frontend.WithHttpsEndpoint(env: "PORT")
+        .WithExternalHttpEndpoints()
+        .PublishAsDockerFile();
 }
-else{
-    frontend.WithHttpsEndpoint(env: "PORT", port: 80);
+else
+{
+    frontend.WithHttpEndpoint(env: "PORT")
+        .WithExternalHttpEndpoints();
 }
 
 builder.Build().Run();
