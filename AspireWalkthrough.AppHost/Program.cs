@@ -5,8 +5,9 @@ var builder = DistributedApplication.CreateBuilder(args);
 var launchProfile = builder.Configuration["DOTNET_LAUNCH_PROFILE"] ??
                     builder.Configuration["AppHost:DefaultLaunchProfileName"];
 
-var backend = builder.AddProject<Projects.Backend>("backend")
-    .WithReplicas(2);
+// var backend = builder.AddProject<Projects.Backend>("backend")
+//     .WithReplicas(2);
+var backend = builder.AddConnectionString("backend", "services__backend__https__0");
 
 var user = builder.AddParameter("postgresuser", "postgres");
 var pw = builder.AddParameter("postgrespassword", secret: true);
