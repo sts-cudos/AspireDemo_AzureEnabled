@@ -13,20 +13,17 @@ var user = builder.AddParameter("postgresuser", "postgres");
 var pw = builder.AddParameter("postgrespassword", secret: true);
 
 var postgres = builder
-    .AddAzurePostgresFlexibleServer("postgres");
-
-if (builder.ExecutionContext.IsPublishMode)
-{
-    postgres.WithPasswordAuthentication(user, pw);
-}
-else
-{
-    postgres.RunAsContainer(configure =>
+    .AddAzurePostgresFlexibleServer("postgres")
+    .RunAsContainer(configure =>
     {
         configure
             .WithDataVolume("postgresdata", isReadOnly: false)
             .WithContainerName("postgres-local");
     });
+
+if (builder.ExecutionContext.IsPublishMode)
+{
+    postgres.WithPasswordAuthentication(user, pw);
 }
 
 var aspiredb = postgres.AddDatabase("aspiredb");
@@ -47,13 +44,13 @@ var webapi = builder.AddProject<Projects.WebApi>("webapi")
     .WaitFor(cache);
 
 var frontend = builder.AddNpmApp("frontend", "../AngularFE")
-    .WithReference(webapi);
+    .WithReference(webapi)
+    .PublishAsDockerFile();
 
 if (builder.ExecutionContext.IsPublishMode)
 {
     frontend.WithHttpsEndpoint(env: "PORT")
-        .WithExternalHttpEndpoints()
-        .PublishAsDockerFile();
+        .WithExternalHttpEndpoints();
 }
 else
 {
