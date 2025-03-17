@@ -15,8 +15,8 @@ export class PageComponent {
   addResult = '';
   
   async ping() {
-    this.client.get('/api/ping').pipe().subscribe((data: any) => {
-      this.pingResult = data.message;
+    this.client.get('/api/ping', { responseType: 'text' }).pipe().subscribe((data: string) => {
+      this.pingResult = data;
     });
   }
 
