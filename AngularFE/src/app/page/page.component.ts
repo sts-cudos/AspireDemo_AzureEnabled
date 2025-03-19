@@ -13,6 +13,7 @@ export class PageComponent {
 
   pingResult = '';
   addResult = '';
+  postgresResult = '';
   
   async ping() {
     this.client.get('/api/ping', { responseType: 'text' }).pipe().subscribe((data: string) => {
@@ -23,6 +24,12 @@ export class PageComponent {
   async add() {
     this.client.get(`/api/add`).pipe().subscribe((data: any) => {
       this.addResult = data.sum;
+    });
+  }
+
+  async postgres() {
+    this.client.get(`/api/answer-from-db`).pipe().subscribe((data: any) => {
+      this.postgresResult = data
     });
   }
 }
