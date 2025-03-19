@@ -9,14 +9,9 @@ This guide will walk you through the steps to set up and run the AspireWalkthrou
     cd AspireWalkthrough.AppHost
     ```
 
-2. **Create a directory for Azure output:**
+2. **Run the application to generate the manifest file:**
     ```sh
-    mkdir Azure
-    ```
-
-3. **Run the application to generate the manifest file:**
-    ```sh
-    dotnet run --publisher manifest --output-path Azure/manifest.json
+    dotnet run --publisher manifest --output-path manifest.json
     ```
 
 4. **Authenticate with Azure using Azure Developer CLI (azd):**
@@ -24,8 +19,7 @@ This guide will walk you through the steps to set up and run the AspireWalkthrou
     azd auth login
     ```
 
-
-5. **Enable infrastructure synthesis in Azure Developer CLI:**
+5. **Enable infrastructure synthesis in Azure Developer CLI: (SKIP)**
     Note: This step may be required due to organizational policies.
 
     ```sh

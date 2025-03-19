@@ -2,12 +2,12 @@
 
 <h2>Ping</h2>
 <button (click)="ping()">Ping</button>
-<p>{{ pingResult }}</p>
+<p>{{ pingResult | async}}</p>
 
 <h2>Get Add Result</h2>
 <button (click)="add()">Add</button>
-<p>{{ addResult }}</p>
+<p>{{ addResult |async}}</p>
 
 <h2>Access Postgres</h2>
 <button onclick="postgres()">Access</button>
-<p>{{ postgresResult}}</p>
+<p>{{ postgresResult |async}}</p>
